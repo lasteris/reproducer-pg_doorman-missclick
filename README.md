@@ -20,7 +20,7 @@ uv lock
 
 This Playbook runs follow actions:
 - Installs Podman
-- Deploys Red OS 7.3 Murom into Podman (exposes ports: 7432 - PgDoorman, 2222 - ssh, 8181 - app);
+- Deploys Red OS 7.3 Murom into Podman (exposes ports: 7432 - PgDoorman, 2222 - ssh, 9001 - app);
 All further actions are inside container redos-murom-7:
   - Installs Packages, which required by some Ansible collections, PgDoorman and other;
   - Deploy Postgresql (Database: mis, user: mis, pass: SecurePass123!, table: user_activity with 1000 generated records);
