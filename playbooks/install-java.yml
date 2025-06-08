@@ -1,0 +1,26 @@
+- name: Install Java 24 Amazon Coretto
+  hosts: target_host
+  vars:
+    base_url: "https://corretto.aws/downloads/resources/24.0.1.9.1"
+    archive_name: "amazon-corretto-24.0.1.9.1-linux-x64.tar.gz"
+    install_dir: "/opt/jdk/"
+    tmp_dir: "/tmp/"
+  tasks:
+    - name: Ensure JDK directory exists
+      ansible.builtin.file:
+        path: "{{ install_dir }}"
+        state: directory
+        mode: "0777"
+
+    - name: Get Java
+      ansible.builtin.get_url:
+        url: "{{ base_url }}/{{ archive_name }}"
+        dest: "{{ tmp_dir }}"
+        mode: "0755"
+
+    - name: Unpack Java
+      ansible.builtin.unarchive:
+        remote_src: true
+        src: "{{ tmp_dir }}/{{ archive_name }}"
+        dest: "{{ install_dir }}"
+        mode: "0777"

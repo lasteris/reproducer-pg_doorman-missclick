@@ -1,0 +1,45 @@
+- name: Install PgDoorman
+  hosts: target_host
+  vars:
+    env_file: "/etc/profile.d/pg_doorman.sh"
+    tmp_dir: "/tmp/pg_doorman"
+  tasks:
+    - name: Clone repo from GitHub
+      ansible.builtin.git:
+        repo: 'https://github.com/ozontech/pg_doorman.git'
+        dest: "{{ tmp_dir }}"
+        version: master
+        clone: true
+
+    - name: Build PgDoorman
+      ansible.builtin.shell:
+        cmd: "set -o pipefail && cd {{ tmp_dir }} && cargo build --release"
+      register: build_pg_doorman
+      changed_when: false
+
+    - name: Copy
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ tmp_dir }}/target/release/pg_doorman"
+        dest: "/usr/bin/"
+        mode: "0777"
+
+    - name: Copy
+      ansible.builtin.copy:
+        remote_src: false
+        src: "pg_doorman.toml"
+        dest: "/etc/pg_doorman/"
+        mode: "0777"
+
+    - name: Copy
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ tmp_dir }}/pg_doorman.service"
+        dest: "/etc/systemd/system/"
+        mode: "0777"
+
+    - name: Enable PgDoorman
+      ansible.builtin.systemd_service:
+        name: pg_doorman
+        state: started
+        enabled: true

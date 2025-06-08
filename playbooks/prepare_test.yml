@@ -1,0 +1,27 @@
+- name: Prepare for k6 test
+  hosts: target_host
+  tasks:
+
+    - name: Install k6 repo
+      ansible.builtin.dnf:
+        disable_gpg_check: true
+        name: https://dl.k6.io/rpm/repo.rpm
+        state: present
+
+    - name: Install k6
+      ansible.builtin.dnf:
+        name: k6
+        state: present
+
+    - name: Ensure k6 directory exists
+      ansible.builtin.file:
+        path: "/opt/k6/"
+        state: directory
+        mode: "0755"
+
+    - name: Copy k6 script
+      ansible.builtin.copy:
+        remote_src: false
+        src: "k6/test.js"
+        dest: "/opt/k6/"
+        mode: "0777"

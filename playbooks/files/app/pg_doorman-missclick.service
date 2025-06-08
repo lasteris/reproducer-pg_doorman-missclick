@@ -1,0 +1,13 @@
+[Unit]
+Description=pg_doorman-missclick
+
+[Service]
+Environment=JAVA_HOME=/opt/jdk/amazon-corretto-24.0.1.9.1-linux-x64
+User=root
+WorkingDirectory=/opt/pg_doorman-missclick
+ExecStart=/opt/pg_doorman-missclick/start.sh
+Restart=on-failure
+RestartSec=1s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+    [general]
+    host = "0.0.0.0"
+    port = 7432
+
+    admin_username = "admin"
+    admin_password = "admin"
+
+    [pools]
+
+    [pools.mis]
+    server_host = "127.0.0.1"
+    server_port = 5432
+    pool_mode = "transaction"
+
+    [pools.mis.users.0]
+    pool_size = 40
+    username = "mis"
+    password = "SCRAM-SHA-256$4096:c40UyimpH7vKROSimpep4A==$O3A9n1naAjPvgc1AF8tW0e8il2lNhCaFBts/SpKhfhE=:WMk0Rb3I1kLBHiKcyEQECihkNTwH8xzGEMjsIFpQ7zQ="
+    server_username = "mis"
+    server_password = "SecurePass123!"

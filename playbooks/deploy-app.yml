@@ -1,0 +1,52 @@
+- name: Deploy app
+  hosts: target_host
+  vars:
+    app_dir: "/opt/pg_doorman-missclick/"
+    app_config_dir: "{{ app_dir }}config/"
+    app_jar_name: "pg_doorman-missclick-1.0.0-SNAPSHOT-runner.jar"
+  tasks:
+    - name: Create App directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create App Config directory
+      ansible.builtin.file:
+        path: "{{ app_config_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy App jar
+      ansible.builtin.copy:
+        remote_src: false
+        src: "app/{{ app_jar_name }}"
+        dest: "{{ app_dir }}"
+        mode: "0777"
+
+    - name: Copy start.sh
+      ansible.builtin.copy:
+        remote_src: false
+        src: "app/start.sh"
+        dest: "{{ app_dir }}"
+        mode: "0777"
+
+    - name: Copy App Config file
+      ansible.builtin.copy:
+        remote_src: false
+        src: "app/config/application.properties"
+        dest: "{{ app_config_dir }}"
+        mode: "0777"
+
+    - name: Copy App service file
+      ansible.builtin.copy:
+        remote_src: false
+        src: "app/pg_doorman-missclick.service"
+        dest: "/etc/systemd/system/"
+        mode: "0777"
+
+    - name: Enable app service
+      ansible.builtin.systemd_service:
+        name: pg_doorman-missclick
+        state: started
+        enabled: true

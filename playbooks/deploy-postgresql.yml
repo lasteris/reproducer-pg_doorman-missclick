@@ -1,0 +1,192 @@
+- name: Deploy Postgresql
+  hosts: target_host
+  become: true
+  vars:
+    pg_version: "15"
+    pg_user: "mis"
+    pg_password: "SecurePass123!"
+    pg_database: "mis"
+    pg_sample_table: "user_activity"
+    pg_data_size: 1000
+
+  tasks:
+    - name: Install Postgresql Dependencies
+      ansible.builtin.dnf:
+        name:
+          - "postgresql{{ pg_version }}"
+          - "postgresql{{ pg_version }}-libs"
+          - "postgresql{{ pg_version }}-contrib"
+          - "postgresql{{ pg_version }}-devel"
+          - "postgresql{{ pg_version }}-server"
+        state: present
+        update_cache: true
+
+    - name: Initialize DB
+      ansible.builtin.command:
+        cmd: "/usr/pgsql-{{ pg_version }}/bin/postgresql-{{ pg_version }}-setup initdb"
+        creates: "/var/lib/pgsql/{{ pg_version }}/data/PG_VERSION"
+
+    - name: "Start and enable Postgresql systemd service"
+      ansible.builtin.systemd_service:
+        name: "postgresql-{{ pg_version }}"
+        state: started
+        enabled: true
+
+    - name: "Allow host-based md5 connection for mis"
+      community.postgresql.postgresql_pg_hba:
+        dest: "~/{{ pg_version }}/data/pg_hba.conf"
+        contype: host
+        address: all
+        databases: all
+        method: md5
+        users: "{{ pg_user }}"
+        create: true
+      become: true
+      become_user: postgres
+
+    - name: "Allow local-based md5 connection for the mis"
+      community.postgresql.postgresql_pg_hba:
+        dest: "~/{{ pg_version }}/data/pg_hba.conf"
+        contype: local
+        databases: all
+        method: md5
+        users: "{{ pg_user }}"
+        create: true
+      become: true
+      become_user: postgres
+
+    - name: "Allow local peer connection for the postgres"
+      community.postgresql.postgresql_pg_hba:
+        dest: "~/{{ pg_version }}/data/pg_hba.conf"
+        contype: local
+        databases: all
+        method: peer
+        users: postgres
+        create: true
+      become: true
+      become_user: postgres
+
+    - name: Restart postgresql
+      ansible.builtin.systemd_service:
+        name: "postgresql-{{ pg_version }}"
+        state: restarted
+
+    - name: "Create db user"
+      community.postgresql.postgresql_user:
+        state: present
+        name: "{{ pg_user }}"
+        password: "{{ pg_password }}"
+      become: true
+      become_user: postgres
+
+    - name: Create application database
+      community.postgresql.postgresql_db:
+        name: "{{ pg_database }}"
+        owner: "{{ pg_user }}"
+      become: true
+      become_user: postgres
+
+    - name: "Grant db user access to app db"
+      community.postgresql.postgresql_privs:
+        type: database
+        login_db: "{{ pg_database }}"
+        roles: "{{ pg_user }}"
+        grant_option: false
+        privs: all
+      become: true
+      become_user: postgres
+
+    - name: Configure postgresql.conf
+      ansible.builtin.blockinfile:
+        path: "/var/lib/pgsql/{{ pg_version }}/data/postgresql.conf"
+        block: |
+          # ANSIBLE MANAGED BLOCK - Performance
+          shared_preload_libraries = 'pg_stat_statements'
+          pg_stat_statements.track = all
+          listen_addresses = '*'
+          max_connections = 100
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+
+    - name: Reload PostgreSQL config
+      ansible.builtin.systemd_service:
+        name: "postgresql-{{ pg_version }}"
+        state: reloaded
+
+    - name: Install pg_stat_statements
+      community.postgresql.postgresql_ext:
+        name: pg_stat_statements
+        login_db: "{{ pg_database }}"
+      become: true
+      become_user: postgres
+
+    - name: Create sample table
+      community.postgresql.postgresql_query:
+        login_db: "{{ pg_database }}"
+        login_user: "{{ pg_user }}"
+        login_password: "{{ pg_password }}"
+        query: |
+          CREATE TABLE IF NOT EXISTS {{ pg_sample_table }} (
+            id bigint generated always as identity primary key,
+            a text,
+            b text,
+            c timestamp DEFAULT NOW(),
+            d bigint,
+            e boolean default false,
+            i text,
+            j text,
+            k text,
+            l text,
+            m text,
+            n text,
+            op_stat text,
+            metadata JSONB
+          )
+
+    - name: Generate sample data
+      community.postgresql.postgresql_query:
+        db: "{{ pg_database }}"
+        login_user: "{{ pg_user }}"
+        login_password: "{{ pg_password }}"
+        query: |
+          INSERT INTO {{ pg_sample_table }} (a, b, d, i, j, k, l, m, n, op_stat, metadata)
+          SELECT
+            'a' || n,
+            'b' || n,
+             n,
+             'a' || n,
+             'a' || n,
+             'a' || n,
+             'a' || n,
+             'a' || n,
+             'a' || n,
+             'a' || n,
+            jsonb_build_object('ip', '192.168.1.' || (n % 255), 'device', CASE WHEN n % 2 = 0 THEN 'mobile' ELSE 'desktop' END)
+          FROM generate_series(1, {{ pg_data_size }}) AS n
+      when: pg_data_size > 0
+
+    - name: Verify installation
+      community.postgresql.postgresql_query:
+        db: "{{ pg_database }}"
+        login_user: "{{ pg_user }}"
+        login_password: "{{ pg_password }}"
+        query: "SELECT version(), current_database(), pg_size_pretty(pg_database_size(current_database())) as db_size"
+      register: pg_info
+
+    - name: Show summary
+      ansible.builtin.debug:
+        msg: |
+          PostgreSQL Deployment Complete
+          -----------------------------
+          Version: {{ pg_info.query_result[0].version }}
+          Database: {{ pg_info.query_result[0].current_database }}
+          Size: {{ pg_info.query_result[0].db_size }}
+          Sample Table: {{ pg_sample_table }} ({{ pg_data_size }} records)
+          Connection String:
+            psql -h 127.0.0.1 -U {{ pg_user }} -d {{ pg_database }}
+
+
+  handlers:
+    - name: Restart postgresql
+      ansible.builtin.systemd_service:
+        name: "postgresql-{{ pg_version }}"
+        state: restarted

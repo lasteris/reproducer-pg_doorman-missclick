@@ -1,0 +1,60 @@
+- name: Install Simple Packages
+  hosts: target_host
+  tasks:
+    - name: Install sudo
+      ansible.builtin.dnf:
+        name: sudo
+        state: present
+
+    - name: Install git
+      ansible.builtin.dnf:
+        name: git
+        state: present
+
+    - name: Install openssl
+      ansible.builtin.dnf:
+        name: openssl-devel-1.1.1q-8.el7.3.x86_64
+        state: present
+
+    - name: Install curl
+      ansible.builtin.dnf:
+        name: curl
+        state: present
+
+    - name: Install gcc
+      ansible.builtin.dnf:
+        name: gcc
+        state: present
+
+    - name: Install make
+      ansible.builtin.dnf:
+        name: make
+        state: present
+
+    - name: Install wget
+      ansible.builtin.dnf:
+        name: wget
+        state: present
+
+    - name: Install xz
+      ansible.builtin.dnf:
+        name: xz
+        state: present
+
+    - name: Install redhat-lsb-core
+      ansible.builtin.dnf:
+        name: redhat-lsb-core
+        state: present
+
+    - name: Install pip
+      ansible.builtin.dnf:
+        name: [python3-pip, python3-wheel, python3-setuptools]
+
+    - name: Upgrade pip
+      ansible.builtin.command:
+        cmd: python3 -m pip install --upgrade pip
+      changed_when: false
+
+    - name: Install psycopg2-binary
+      ansible.builtin.pip:
+        name: psycopg2-binary

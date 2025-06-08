@@ -1,0 +1,115 @@
+- name: Install Rust
+  hosts: target_host
+  vars:
+    rust_version: "1.87.0"
+    install_dir: "/opt/rust/{{ rust_version }}"
+    rust_bin: "{{ install_dir }}/bin/rustc"
+    temp_dir: "/var/tmp/rust_install_{{ ansible_date_time.epoch }}"
+    profile_dir: "/etc/profile.d"
+    rust_env_file: "{{ profile_dir }}/rust.sh"
+
+  tasks:
+    # Phase 1: System Verification
+    - name: Check for existing Rust installation
+      ansible.builtin.command: "{{ rust_bin }} --version"
+      register: existing_rust
+      ignore_errors: true
+      changed_when: false
+      check_mode: false
+
+    - name: Verify system inodes
+      ansible.builtin.shell:
+        cmd: set -o pipefail && df --output=iavail | tail -n1
+      register: inodes_check
+      changed_when: false
+
+    # Phase 2: Conditional Installation
+    - name: Install, Configure, Verify Rust
+      when:
+        - existing_rust is failed or rust_version not in existing_rust.stdout
+      block:
+        - name: Ensure profile directory exists
+          ansible.builtin.file:
+            path: "{{ profile_dir }}"
+            state: directory
+            mode: "0755"
+
+        - name: Create isolated temp directory
+          ansible.builtin.file:
+            path: "{{ temp_dir }}"
+            state: directory
+            mode: "1755"
+
+        - name: Download rustup installer
+          ansible.builtin.get_url:
+            url: https://sh.rustup.rs
+            dest: "{{ temp_dir }}/rustup.sh"
+            mode: "0755"
+          retries: 3
+          delay: 10
+
+        - name: Install Rust via rustup
+          ansible.builtin.command: >
+            {{ temp_dir }}/rustup.sh -y
+            --default-toolchain {{ rust_version }}
+            --profile minimal
+            --no-modify-path
+          environment:
+            CARGO_HOME: "{{ install_dir }}"
+            RUSTUP_HOME: "{{ install_dir }}/rustup"
+          register: rust_install
+          args:
+            creates: "{{ rust_bin }}"
+
+        - name: Create environment file
+          ansible.builtin.copy:
+            dest: "{{ rust_env_file }}"
+            content: |
+              # Rust environment
+              export PATH="{{ install_dir }}/bin:$PATH"
+              export CARGO_HOME="{{ install_dir }}"
+              export RUSTUP_HOME="{{ install_dir }}/rustup"
+            mode: "0644"
+
+        - name: Load environment immediately
+          ansible.builtin.shell: source {{ rust_env_file }}
+          args:
+            executable: /bin/bash
+          changed_when: false
+
+        - name: Verify new installation
+          ansible.builtin.command: "{{ rust_bin }} --version"
+          register: new_rust_check
+          changed_when: false
+
+        - name: Cleanup temporary files
+          ansible.builtin.file:
+            path: "{{ temp_dir }}"
+            state: absent
+      rescue:
+        - name: Handle installation failure
+          ansible.builtin.debug:
+            msg: "Rust installation failed. See logs for details."
+          failed_when: true
+
+    # Phase 3: Final Verification
+    - name: Validate Rust availability
+      ansible.builtin.command: "{{ rust_bin }} --version"
+      register: final_rust_check
+      changed_when: false
+
+    - name: Show installation report
+      ansible.builtin.debug:
+        msg: |
+          Rust Installation Report
+          -----------------------
+          {% if existing_rust is succeeded %}
+          Existing Version: {{ existing_rust.stdout }}
+          {% endif %}
+          Installed Version: {{ final_rust_check.stdout }}
+          Location: {{ install_dir }}
+          Disk Status:
+            - Inodes: {{ inodes_check.stdout }} free
+          {% if existing_rust is succeeded and rust_version in existing_rust.stdout %}
+          NOTE: Correct version already installed
+          {% endif %}

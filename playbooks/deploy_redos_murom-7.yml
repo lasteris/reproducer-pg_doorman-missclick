@@ -1,0 +1,117 @@
+- name: Install Red OS 7.3
+  hosts: localhost
+  connection: local
+  vars:
+    container_name: "redos-murom-7"
+    ssh_port: 2222
+    db_port: 7432
+    app_port: 9001
+    ubi7_image: "registry.red-soft.ru/ubi7/ubi"
+    ssh_key_path: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa"
+
+  tasks:
+    - name: Ensure SSH key exists
+      block:
+        - name: Create .ssh directory if missing
+          ansible.builtin.file:
+            path: "{{ lookup('env', 'HOME') }}/.ssh"
+            state: directory
+            mode: '0700'
+
+        - name: Generate SSH key pair
+          ansible.builtin.command: >
+            ssh-keygen -t rsa -b 4096 -f {{ ssh_key_path }} -N ""
+          args:
+            creates: "{{ ssh_key_path }}.pub"
+          register: keygen_result
+          changed_when: keygen_result.rc == 0
+
+        - name: Display public key
+          ansible.builtin.debug:
+            msg: "Generated SSH public key: {{ lookup('file', ssh_key_path + '.pub') }}"
+
+    - name: Install Podman
+      ansible.builtin.apt:
+        name:
+          - podman
+        state: present
+        update_cache: true
+
+    - name: Ensure UBI7 container exists and is running
+      containers.podman.podman_container:
+        name: "{{ container_name }}"
+        image: "{{ ubi7_image }}"
+        state: started
+        pull: missing
+        privileged: true
+        detach: true
+        interactive: true
+        tty: true
+        log_level: debug
+        log_driver: journald
+        log_opt:
+          path: /tmp/redos-log.json
+        ports:
+          - "{{ app_port }}:8181"
+          - "{{ ssh_port }}:22"
+          - "{{ db_port }}:7432"
+        command: "/usr/sbin/init"
+        restart_policy: "unless-stopped"
+        volumes:
+          - "/sys/fs/cgroup:/sys/fs/cgroup:rw"
+        tmpfs:  # CORRECT DICTIONARY FORMAT
+          /run: "size=512M,exec"
+          /tmp: "size=1G"
+        labels:
+          ansible: "managed"
+
+    - name: Install SSH server
+      containers.podman.podman_container_exec:
+        name: "{{ container_name }}"
+        command: "dnf install -y openssh-server"
+
+    - name: Configure SSH securely
+      containers.podman.podman_container_exec:
+        name: "{{ container_name }}"
+        command: |
+          bash -c '
+          ssh-keygen -A &&
+          mkdir -p /run/sshd &&
+          echo -e "PermitRootLogin prohibit-password\\nPasswordAuthentication no" > /etc/ssh/sshd_config.d/ansible.conf &&
+          systemctl enable --now sshd
+          '
+
+    - name: Deploy SSH key
+      containers.podman.podman_container_exec:
+        name: "{{ container_name }}"
+        command: |
+          bash -c '
+          mkdir -p /root/.ssh &&
+          echo "{{ lookup('file', ssh_key_path + '.pub') }}" >> /root/.ssh/authorized_keys &&
+          chmod 700 /root/.ssh &&
+          chmod 600 /root/.ssh/authorized_keys
+          '
+
+    - name: Verify deployment
+      ansible.builtin.command: >
+        ssh -p {{ ssh_port }} -o StrictHostKeyChecking=no
+        -o PasswordAuthentication=no
+        root@localhost true
+      register: connection_test
+      ignore_errors: true
+      changed_when: false
+
+    - name: Show success message
+      ansible.builtin.debug:
+        msg: |
+          ✅ Deployment Successful! ✅
+          Connect using:
+          ssh -p {{ ssh_port }} root@localhost
+          Container name: {{ container_name }}
+          SSH port: {{ ssh_port }}
+      when: connection_test.rc == 0
+
+    - name: Install Python (required for dnf)
+      containers.podman.podman_container_exec:
+        name: "{{ container_name }}"
+        command: "dnf install -y python3"
