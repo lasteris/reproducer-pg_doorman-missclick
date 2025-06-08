@@ -21,6 +21,6 @@
     - name: Unpack Java
       ansible.builtin.unarchive:
         remote_src: true
-        src: "{{ tmp_dir }}/{{ archive_name }}"
+        src: "{{ tmp_dir }}{{ archive_name }}"
         dest: "{{ install_dir }}"
         mode: "0777"
