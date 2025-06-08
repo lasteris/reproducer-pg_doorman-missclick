@@ -48,5 +48,5 @@
     - name: Enable app service
       ansible.builtin.systemd_service:
         name: pg_doorman-missclick
-        state: started
+        state: restarted
         enabled: true
