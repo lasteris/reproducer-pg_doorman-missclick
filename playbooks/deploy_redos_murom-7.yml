@@ -31,7 +31,7 @@
             msg: "Generated SSH public key: {{ lookup('file', ssh_key_path + '.pub') }}"
 
     - name: Install Podman
-      ansible.builtin.apt:
+      ansible.builtin.dnf:
         name:
           - podman
         state: present
